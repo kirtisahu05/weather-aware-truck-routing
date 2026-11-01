@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.sqlite3
+
+# React
+node_modules/
+dist/
+
+# Environment
+.DS_Store
+DEVELOPER_GUIDE.md
