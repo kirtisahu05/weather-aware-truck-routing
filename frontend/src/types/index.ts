@@ -33,18 +33,18 @@ export interface CheckpointRisk {
   no_travel: boolean;
 }
 
-// export interface WeatherData {
-//   forecast_time: string;
-//   wind_mph: number;
-//   rain_inches_per_hour: number;
-//   snow_inches_per_hour: number;
-// }
+export interface WeatherData {
+  forecast_time: string;
+  wind_mph: number;
+  rain_inches_per_hour: number;
+  snow_inches_per_hour: number;
+}
 
 export interface WeatherData {
   forecast_time: string;
-  wind_mph: number | null;
-  rain_inches_per_hour: number | null;
-  snow_inches_per_hour: number | null;
+  wind_mph: number;
+  rain_inches_per_hour: number;
+  snow_inches_per_hour: number;
 }
 
 export interface RouteCheckpoint {
@@ -56,7 +56,6 @@ export interface RouteCheckpoint {
   route_id: string;
   weather: WeatherData;
   risk: CheckpointRisk;
-  hourly_forecast: HourlyForecast[];
 }
 
 export interface RouteGeometry {
@@ -67,6 +66,7 @@ export interface RouteGeometry {
 export interface Route {
   route_id: string;
   route_name: string;
+  via: string;
   distance_miles: number;
   duration_hours: number;
   duration_seconds?: number;
@@ -80,15 +80,24 @@ export interface Recommendation {
   message: string;
 }
 
+export interface HeatmapPoint {
+  longitude: number;
+  latitude: number;
+  // One risk rank per forecast hour after departure: 0 is Low, 4 is No Travel, -1 is no forecast.
+  risks: number[];
+}
+
+export interface CorridorHeatmap {
+  spacing_miles: number;
+  hours: number;
+  points: HeatmapPoint[];
+}
+
 export interface TripAnalysisResponse {
   status: string;
   message: string;
   trip: TripRequest;
   routes: Route[];
   recommendation: Recommendation;
-}
-
-export interface HourlyForecast extends WeatherData {
-  hour_offset: number;
-  risk: CheckpointRisk;
+  corridor_heatmap: CorridorHeatmap | null;
 }

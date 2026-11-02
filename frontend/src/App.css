@@ -7,22 +7,13 @@
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  font-family: Inter, Arial, sans-serif;
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
 button,
-input,
-select {
+input {
   font: inherit;
 }
 
 button:focus-visible,
-input:focus-visible,
-select:focus-visible {
+input:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
@@ -65,7 +56,7 @@ select:focus-visible {
 
 .trip-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px 22px;
   padding: 28px;
   background: white;
@@ -86,8 +77,93 @@ select:focus-visible {
   font-weight: 600;
 }
 
-.trip-form input,
-.trip-form select {
+.trip-form > div {
+  grid-column: span 2;
+}
+
+.trip-form > div:nth-of-type(-n + 2) {
+  grid-column: span 3;
+}
+
+.interval-selector {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.interval-selector legend {
+  margin-bottom: 7px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.interval-options {
+  display: flex;
+  padding: 3px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.trip-form .interval-option {
+  flex: 1;
+  margin: 0;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Hidden but still focusable, so keyboards and screen readers treat these as radio buttons. */
+.trip-form .interval-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  opacity: 0;
+}
+
+.interval-option span {
+  display: block;
+  padding: 10.5px 6px;
+  border-radius: 6px;
+  color: #334155;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.interval-option:hover span {
+  background: #f1f5f9;
+}
+
+.interval-option input:checked + span {
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+.interval-option input:focus-visible + span {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.interval-selector:disabled .interval-options {
+  background: #f1f5f9;
+}
+
+.interval-selector:disabled .interval-option {
+  cursor: not-allowed;
+}
+
+.interval-selector:disabled .interval-option:hover span {
+  background: none;
+}
+
+.interval-selector:disabled .interval-option input:checked + span {
+  background: #94a3b8;
+}
+
+.trip-form input {
   width: 100%;
   padding: 12px;
   border: 1px solid #cbd5e1;
@@ -96,8 +172,13 @@ select:focus-visible {
   color: #1e293b;
 }
 
-.trip-form input:focus,
-.trip-form select:focus {
+.trip-form input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.trip-form input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   outline: none;
@@ -187,10 +268,6 @@ select:focus-visible {
    RESULTS AND ROUTE COMPARISON
 ========================================= */
 
-.results-section {
-  margin-top: 35px;
-}
-
 .route-comparison-heading {
   display: flex;
   justify-content: space-between;
@@ -202,25 +279,18 @@ select:focus-visible {
   margin: 0 0 6px;
 }
 
-.route-comparison-heading p,
-.safest-route-hint {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
 .route-comparison-heading p {
   margin: 0;
-}
-
-.safest-route-hint {
-  margin: 0 0 20px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .route-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
-  align-items: stretch;
+  /* An expanded card must not stretch the cards beside it. */
+  align-items: start;
   margin: 20px 0 36px;
 }
 
@@ -230,18 +300,12 @@ select:focus-visible {
 
 .route-card {
   min-width: 0;
-  height: 100%;
-  padding: 22px;
+  padding: 16px;
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.route-card.recommended {
-  border: 2px solid #16a34a;
-  box-shadow: 0 4px 18px rgba(22, 163, 74, 0.12);
 }
 
 .route-card-header {
@@ -250,7 +314,7 @@ select:focus-visible {
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .route-card-eyebrow {
@@ -284,9 +348,9 @@ select:focus-visible {
 
 .route-card-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 14px 0;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
   border-top: 1px solid #e2e8f0;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -304,7 +368,7 @@ select:focus-visible {
 
 .route-stat strong {
   color: #0f172a;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 /* Risk breakdown */
@@ -313,7 +377,7 @@ select:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 18px 0 12px;
+  margin: 12px 0 8px;
 }
 
 .route-card-risk-heading h4 {
@@ -326,26 +390,6 @@ select:focus-visible {
   font-size: 0.8rem;
 }
 
-.risk-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.risk-summary-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-
-.risk-summary-row strong {
-  color: #334155;
-  font-size: 0.88rem;
-  white-space: nowrap;
-}
-
 .risk-badge {
   display: inline-block;
   padding: 5px 9px;
@@ -355,6 +399,36 @@ select:focus-visible {
   font-weight: bold;
 }
 
+.risk-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e2e8f0;
+}
+
+.risk-bar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #475569;
+  font-size: 12px;
+}
+
+.risk-bar-legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.risk-bar-legend strong {
+  color: #0f172a;
+}
+
 /* Card footer */
 
 .route-card-footer {
@@ -362,8 +436,8 @@ select:focus-visible {
   justify-content: space-between;
   align-items: flex-end;
   gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid #e2e8f0;
 }
 
@@ -378,16 +452,6 @@ select:focus-visible {
   font-size: 0.95rem;
 }
 
-.forecast-unavailable {
-  text-align: right;
-}
-
-.route-card-note {
-  margin: 12px 0 0;
-  color: #b45309;
-  font-size: 0.8rem;
-}
-
 /* =========================================
    ROUTE MAP TOOLBAR
 ========================================= */
@@ -397,97 +461,11 @@ select:focus-visible {
   margin-top: 28px;
 }
 
-.route-map-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.route-map-toolbar h2 {
-  margin: 0 0 5px;
-  font-size: 22px;
-}
-
-.route-map-toolbar p {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.export-data-button {
-  padding: 10px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: white;
-  color: #1e293b;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.export-data-button:hover:not(:disabled) {
-  background: #f1f5f9;
-}
-
-.export-data-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* =========================================
    FORECAST TIMELINE
 ========================================= */
 
-.forecast-timeline {
-  margin-bottom: 18px;
-  padding: 20px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-}
-
-.forecast-timeline-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
 /* Only the descriptive block should stack its contents. */
-.forecast-timeline-heading > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.forecast-timeline-heading strong {
-  color: #0f172a;
-}
-
-.forecast-timeline-heading span {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.forecast-timeline-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.selected-hour {
-  padding: 7px 12px;
-  background: #eff6ff;
-  color: #1d4ed8 !important;
-  border-radius: 8px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .reset-slider {
   margin: 0;
   padding: 8px 13px;
@@ -507,6 +485,30 @@ select:focus-visible {
 .reset-slider:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.slider-track {
+  position: relative;
+  margin-top: 16px;
+}
+
+/* A line across the track, with a flag above it, at the selected route's arrival time. */
+.arrival-marker {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  width: 2px;
+  transform: translateX(-1px);
+  background: #0f172a;
+  pointer-events: none;
+}
+
+.arrival-marker span {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .forecast-timeline input[type="range"] {
@@ -565,31 +567,6 @@ select:focus-visible {
 }
 
 /* Reset map button */
-
-.reset-map-view-button {
-  position: absolute;
-  top: 16px;
-  right: 65px;
-  z-index: 6;
-  padding: 10px 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: white;
-  color: #1e293b;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
-}
-
-.reset-map-view-button:hover:not(:disabled) {
-  background: #f1f5f9;
-}
-
-.reset-map-view-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 /* =========================================
    CHECKPOINT FILTERS
@@ -657,47 +634,6 @@ select:focus-visible {
   font-size: 13px;
 }
 
-/* =========================================
-   MAP LEGEND
-========================================= */
-
-.map-legend {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 7px;
-  width: fit-content;
-  max-width: 240px;
-  margin: 0;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(8px);
-  font-size: 12px;
-}
-
-.map-legend > strong {
-  display: block;
-  margin-bottom: 3px;
-  color: #1e293b;
-  font-size: 13px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: #334155;
-  font-size: 12px;
-}
-
 .legend-dot {
   display: inline-block;
   flex: 0 0 11px;
@@ -706,13 +642,189 @@ select:focus-visible {
   border-radius: 50%;
 }
 
-.heatmap-legend-note {
-  margin: 4px 0 0;
-  padding-top: 8px;
+/* =========================================
+   HEATMAP SCALE AND MAP ANNOTATIONS
+========================================= */
+
+.heatmap-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.heatmap-scale-bar {
+  height: 9px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #16a34a, #eab308, #f97316, #dc2626, #7f1d1d);
+}
+
+.heatmap-scale-labels {
+  display: flex;
+  justify-content: space-between;
   color: #64748b;
   font-size: 11px;
-  line-height: 1.4;
+}
+
+.route-map-label {
+  padding: 4px 8px;
+  border: 2px solid;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+}
+
+.map-popup-title {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.map-popup-risk {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.map-popup-row {
+  margin: 3px 0;
+  color: #1f2937;
+}
+
+/* =========================================
+   RECOMMENDATION AND ROUTE SELECTION
+========================================= */
+
+.recommendation-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  color: #14532d;
+}
+
+.recommendation-banner.unsafe {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+}
+
+.route-card.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb, 0 4px 18px rgba(37, 99, 235, 0.12);
+}
+
+.route-color-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.route-card-via {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.route-card-warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: #fee2e2;
+  border-radius: 6px;
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.route-select-button {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-select-button[aria-expanded="true"] {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.risk-badge-dark-text {
+  color: #1c1917;
+}
+
+/* =========================================
+   CHECKPOINT TABLE
+========================================= */
+
+.checkpoint-table-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.checkpoint-table-section h4 {
+  margin: 0 0 3px;
+  font-size: 0.95rem;
+}
+
+.checkpoint-table-section p {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.checkpoint-table-scroll {
+  max-height: 320px;
+  overflow: auto;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.checkpoint-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.checkpoint-table .risk-badge {
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.checkpoint-table th,
+.checkpoint-table td {
+  padding: 6px 7px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.checkpoint-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #475569;
 }
 
 /* =========================================
@@ -727,14 +839,328 @@ select:focus-visible {
   border-radius: 8px;
 }
 
-.loading-message {
-  padding: 20px;
-  font-weight: bold;
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: -3px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 3s;
+  }
 }
 
 /* =========================================
    RESPONSIVE
 ========================================= */
+
+/* =========================================
+   MAP CONTROLS
+========================================= */
+
+.map-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+
+.map-actions button {
+  padding: 9px 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+}
+
+.map-actions button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.map-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.forecast-timeline {
+  position: absolute;
+  right: 56px;
+  bottom: 28px;
+  left: 16px;
+  z-index: 5;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.forecast-timeline-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.forecast-timeline-heading > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.forecast-timeline-heading span {
+  color: #475569;
+  font-size: 13px;
+}
+
+.forecast-timeline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.truck-marker {
+  font-size: 24px;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(15, 23, 42, 0.5));
+}
+
+.play-button {
+  flex-shrink: 0;
+  min-width: 78px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 7px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.play-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.selected-hour {
+  padding: 5px 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* =========================================
+   TRIP SUMMARY
+========================================= */
+
+.new-search-button {
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 7px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.new-search-button:hover {
+  background: #1d4ed8;
+}
+
+.trip-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.trip-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.trip-summary strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.trip-summary > div span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.trip-summary button {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: white;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* =========================================
+   RESULTS LAYOUT
+========================================= */
+
+/* Wide screens: results scroll on the left beside a map that stays in view. */
+@media (min-width: 1101px) {
+  .results-view {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .results-view .app-header {
+    padding: 12px 24px;
+  }
+
+  .results-view .app-header h1 {
+    font-size: 20px;
+  }
+
+  .results-view .app-header p {
+    display: none;
+  }
+
+  .dashboard.has-results {
+    display: grid;
+    flex: 1;
+    grid-template-columns: 460px minmax(0, 1fr);
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .has-results .side-panel {
+    min-height: 0;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .has-results .map-panel,
+  .has-results .route-map-wrapper,
+  .has-results .map-workspace {
+    min-height: 0;
+    height: 100%;
+    margin: 0;
+  }
+
+  .has-results .route-map-wrapper {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 20px 20px 0;
+  }
+
+  .has-results .map-workspace {
+    flex: 1;
+  }
+
+  .has-results .route-map-canvas {
+    height: 100%;
+  }
+
+  .has-results .route-cards {
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
+  }
+
+  .has-results .trip-form {
+    grid-template-columns: 1fr;
+    margin-bottom: 16px;
+  }
+
+  .has-results .trip-form h2,
+  .has-results .trip-form > button {
+    grid-column: 1;
+  }
+
+  .has-results .trip-form > div,
+  .has-results .trip-form > div:nth-of-type(-n + 2) {
+    grid-column: 1;
+  }
+}
+
+/* Narrow screens: one column, with the map right after the recommendation. */
+@media (max-width: 1100px) {
+  .dashboard.has-results {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .has-results .side-panel {
+    display: contents;
+  }
+
+  .has-results .new-search-button {
+    align-self: flex-start;
+    margin-bottom: 0;
+  }
+
+  .has-results .trip-summary {
+    margin-bottom: 0;
+  }
+
+  .has-results .recommendation-banner {
+    order: 1;
+    margin-bottom: 0;
+  }
+
+  .has-results .map-panel {
+    order: 2;
+  }
+
+  .has-results .route-comparison-heading,
+  .has-results .route-cards {
+    order: 3;
+    margin: 0;
+  }
+
+  .has-results .route-map-wrapper {
+    margin-top: 0;
+  }
+}
 
 @media (max-width: 1000px) {
   .route-cards {
@@ -749,6 +1175,11 @@ select:focus-visible {
 }
 
 @media (max-width: 700px) {
+  /* The route cards carry the same summary, and these labels would cover a small map. */
+  .route-map-label {
+    display: none;
+  }
+
   .dashboard {
     width: 94%;
     margin: 24px auto;
@@ -761,6 +1192,11 @@ select:focus-visible {
 
   .trip-form h2,
   .trip-form > button {
+    grid-column: 1;
+  }
+
+  .trip-form > div,
+  .trip-form > div:nth-of-type(-n + 2) {
     grid-column: 1;
   }
 
@@ -777,24 +1213,44 @@ select:focus-visible {
   }
 
   .route-map-toolbar,
-  .forecast-timeline-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .forecast-timeline-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
+  /* A small map has no room for overlays, so the controls sit below it. */
   .route-map-canvas {
-    height: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: auto;
+  }
+
+  .route-map {
+    height: 420px;
+  }
+
+  .forecast-timeline,
+  .map-filter-overlay {
+    position: static;
+    width: auto;
+  }
+
+  .forecast-timeline-heading {
+    flex-wrap: wrap;
+  }
+
+  .checkpoint-filter-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .map-actions {
+    top: 10px;
+    right: 10px;
+  }
+
+  .map-actions button {
+    padding: 7px 9px;
+    font-size: 11px;
   }
 
   .map-filter-overlay {
-    top: 10px;
-    left: 10px;
-    width: 190px;
     padding: 11px;
   }
 
@@ -802,45 +1258,14 @@ select:focus-visible {
     gap: 8px;
   }
 
-  .map-legend {
-    right: 8px;
-    bottom: 8px;
-    max-width: 150px;
-    padding: 9px;
-    gap: 6px;
-  }
-
-  .map-legend > strong {
-    font-size: 12px;
-  }
-
-  .legend-item {
-    font-size: 11px;
-  }
-
-  .heatmap-legend-note {
-    font-size: 10px;
-  }
-
   .slider-labels {
     font-size: 10px;
   }
 
-  .forecast-timeline {
-    padding: 16px;
-  }
-
-  .reset-map-view-button {
-    top: 12px;
-    right: 55px;
-    padding: 8px 10px;
-    font-size: 11px;
-  }
 }
 
 @media (max-width: 400px) {
   .map-filter-overlay {
-    width: 175px;
     padding: 9px;
   }
 
@@ -857,7 +1282,4 @@ select:focus-visible {
     font-size: 11px;
   }
 
-  .map-legend {
-    max-width: 125px;
-  }
 }

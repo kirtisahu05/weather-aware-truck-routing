@@ -30,8 +30,14 @@ interface LocationAutocompleteProps {
   name: string;
   value: string;
   placeholder: string;
+  disabled: boolean;
   onChange: (value: string) => void;
 }
+
+const CHECKPOINT_INTERVALS = ["10", "25", "50"];
+
+// A typical cargo load for a semi-truck, not its total weight (legally up to 80,000 lb).
+const DEFAULT_LOAD_WEIGHT_LBS = "25000";
 
 function getCurrentLocalDateTime(): string {
   const now = new Date();
@@ -46,6 +52,7 @@ function LocationAutocomplete({
   name,
   value,
   placeholder,
+  disabled,
   onChange,
 }: LocationAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<MapboxFeature[]>([]);
@@ -91,7 +98,6 @@ useEffect(() => {
 
         setSuggestions(data.features || []);
         setSelectedIndex(-1);
-        setIsOpen(true);
       } catch (error) {
         if (
           error instanceof Error &&
@@ -182,6 +188,7 @@ useEffect(() => {
           onFocus={() => setIsOpen(true)}
           onBlur={() => setIsOpen(false)}
           placeholder={placeholder}
+          disabled={disabled}
           autoComplete="off"
           required
           role="combobox"
@@ -223,9 +230,11 @@ useEffect(() => {
         )}
       </div>
 
-      <p className="location-hint">
-        Type at least 3 characters to see location suggestions.
-      </p>
+      {isOpen && value.length > 0 && value.trim().length < 3 && (
+        <p className="location-hint">
+          Type at least 3 characters to see location suggestions.
+        </p>
+      )}
     </div>
   );
 }
@@ -235,12 +244,12 @@ function TripForm({ onSubmit, loading }: TripFormProps) {
     origin: "",
     destination: "",
     departure_datetime: getCurrentLocalDateTime(),
-    load_weight: "",
+    load_weight: DEFAULT_LOAD_WEIGHT_LBS,
     checkpoint_interval: "25",
   });
 
   const handleChange = (
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const { name, value } = event.target;
 
@@ -293,6 +302,7 @@ function TripForm({ onSubmit, loading }: TripFormProps) {
         name="origin"
         value={formData.origin}
         placeholder="Search starting location"
+        disabled={loading}
         onChange={(value) =>
           setFormData((previous) => ({
             ...previous,
@@ -306,6 +316,7 @@ function TripForm({ onSubmit, loading }: TripFormProps) {
         name="destination"
         value={formData.destination}
         placeholder="Search destination"
+        disabled={loading}
         onChange={(value) =>
           setFormData((previous) => ({
             ...previous,
@@ -325,6 +336,7 @@ function TripForm({ onSubmit, loading }: TripFormProps) {
           name="departure_datetime"
           value={formData.departure_datetime}
           onChange={handleChange}
+          disabled={loading}
           required
         />
       </div>
@@ -342,28 +354,34 @@ function TripForm({ onSubmit, loading }: TripFormProps) {
           step="any"
           value={formData.load_weight}
           onChange={handleChange}
+          disabled={loading}
           required
         />
       </div>
 
       <div>
-        <label htmlFor="checkpoint_interval">
-          Weather Checkpoint Interval
-        </label>
+        <fieldset className="interval-selector" disabled={loading}>
+          <legend>Weather Checkpoint Interval</legend>
 
-        <select
-          id="checkpoint_interval"
-          name="checkpoint_interval"
-          value={formData.checkpoint_interval}
-          onChange={handleChange}
-        >
-          <option value="10">Every 10 miles</option>
-          <option value="25">Every 25 miles</option>
-          <option value="50">Every 50 miles</option>
-        </select>
+          <div className="interval-options">
+            {CHECKPOINT_INTERVALS.map((interval) => (
+              <label className="interval-option" key={interval}>
+                <input
+                  type="radio"
+                  name="checkpoint_interval"
+                  value={interval}
+                  checked={formData.checkpoint_interval === interval}
+                  onChange={handleChange}
+                />
+                <span>{interval} mi</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </div>
 
-      <button type="submit" disabled={loading}>
+      <button type="submit" disabled={loading} aria-busy={loading}>
+        {loading && <span className="spinner" aria-hidden="true" />}
         {loading ? "Analyzing Routes..." : "Find Safest Routes"}
       </button>
     </form>

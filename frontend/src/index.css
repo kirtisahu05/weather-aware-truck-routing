@@ -13,14 +13,13 @@ body,
 }
 
 body {
-  font-family: Inter, Arial, sans-serif;
+  font-family: "Inter Variable", Arial, sans-serif;
   background: #f1f5f9;
   color: #1e293b;
   -webkit-font-smoothing: antialiased;
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }

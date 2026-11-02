@@ -1,122 +1,15 @@
 import { useState } from "react";
 
-import TripForm from "./components/TripForm";
 import RouteCard from "./components/RouteCard";
 import RouteMap from "./components/RouteMap";
+import TripForm from "./components/TripForm";
+import TripSummary from "./components/TripSummary";
 
 import { generateTripAnalysis } from "./services/api";
 
-import type {
-  TripRequest,
-  TripAnalysisResponse,
-  Route,
-  RiskLevel,
-  HourlyForecast,
-} from "./types";
+import type { TripRequest, TripAnalysisResponse } from "./types";
 
 import "./App.css";
-
-interface DynamicRiskSummary {
-  low_miles: number;
-  moderate_miles: number;
-  high_miles: number;
-  severe_miles: number;
-  no_travel_miles: number;
-  unavailable_miles: number;
-  unavailable_checkpoints: number;
-  average_risk_score: number;
-}
-
-const riskScores: Record<RiskLevel, number> = {
-  Low: 0,
-  Moderate: 1,
-  High: 2,
-  Severe: 3,
-  "No Travel": 4,
-};
-
-function getForecast(
-  checkpoint: Route["checkpoints"][number],
-  selectedHour: number
-): HourlyForecast | undefined {
-  return checkpoint.hourly_forecast?.find(
-    (forecast) => forecast.hour_offset === selectedHour
-  );
-}
-
-function calculateDynamicSummary(
-  route: Route,
-  selectedHour: number
-): DynamicRiskSummary {
-  const summary: DynamicRiskSummary = {
-    low_miles: 0,
-    moderate_miles: 0,
-    high_miles: 0,
-    severe_miles: 0,
-    no_travel_miles: 0,
-    unavailable_miles: 0,
-    unavailable_checkpoints: 0,
-    average_risk_score: 0,
-  };
-
-  const checkpoints = [...route.checkpoints].sort(
-    (a, b) => a.distance_miles - b.distance_miles
-  );
-
-  if (checkpoints.length === 0) {
-    summary.unavailable_miles = route.distance_miles;
-    return summary;
-  }
-
-  const lastDistance =
-    checkpoints[checkpoints.length - 1].distance_miles;
-
-  const scale =
-    lastDistance > 0 ? route.distance_miles / lastDistance : 0;
-
-  let totalRiskScore = 0;
-  let scoredMiles = 0;
-
-  const riskKey: Record<RiskLevel, keyof DynamicRiskSummary> = {
-    Low: "low_miles",
-    Moderate: "moderate_miles",
-    High: "high_miles",
-    Severe: "severe_miles",
-    "No Travel": "no_travel_miles",
-  };
-
-  checkpoints.forEach((checkpoint, index) => {
-    const forecast = getForecast(checkpoint, selectedHour);
-    const risk = forecast?.risk?.overall_risk;
-
-    if (!risk || !(risk in riskScores)) {
-      summary.unavailable_checkpoints++;
-    }
-
-    if (index === 0) return;
-
-    const previousDistance = checkpoints[index - 1].distance_miles;
-    const segmentMiles =
-      Math.max(0, checkpoint.distance_miles - previousDistance) *
-      scale;
-
-    if (!risk || !(risk in riskScores)) {
-      summary.unavailable_miles += segmentMiles;
-      return;
-    }
-
-    summary[riskKey[risk]] += segmentMiles;
-    totalRiskScore += riskScores[risk] * segmentMiles;
-    scoredMiles += segmentMiles;
-  });
-
-  summary.average_risk_score =
-    scoredMiles > 0
-      ? Number((totalRiskScore / scoredMiles).toFixed(2))
-      : 0;
-
-  return summary;
-}
 
 function App() {
   const [analysis, setAnalysis] =
@@ -124,17 +17,25 @@ function App() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [selectedHour, setSelectedHour] = useState(0);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [editingTrip, setEditingTrip] = useState(false);
+  const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
 
   const handleTripSubmit = async (tripData: TripRequest) => {
     setLoading(true);
     setError("");
     setAnalysis(null);
-    setSelectedHour(0);
+    setExpandedRouteId(null);
+    setEditingTrip(false);
 
     try {
       const result = await generateTripAnalysis(tripData);
       setAnalysis(result);
+      setSelectedRouteId(
+        result.recommendation.recommended_route_id ??
+          result.routes[0]?.route_id ??
+          null
+      );
     } catch (err: unknown) {
       if (
         typeof err === "object" &&
@@ -161,119 +62,107 @@ function App() {
     }
   };
 
-  const dynamicSummaries = analysis
-    ? analysis.routes.map((route) => ({
-        route,
-        summary: calculateDynamicSummary(route, selectedHour),
-      }))
-    : [];
+  const recommendedRouteId =
+    analysis?.recommendation.recommended_route_id ?? null;
 
-    const rankedRoutes = [...dynamicSummaries].sort((a, b) => {
-    const x = a.summary;
-    const y = b.summary;
-
-    return (
-      x.no_travel_miles - y.no_travel_miles ||
-      x.severe_miles - y.severe_miles ||
-      x.high_miles - y.high_miles ||
-      x.unavailable_miles - y.unavailable_miles ||
-      x.average_risk_score - y.average_risk_score ||
-      a.route.duration_hours - b.route.duration_hours
-    );
-  });
-
-  // const rankedRoutes = [...dynamicSummaries].sort((a, b) => {
-  //   const x = a.summary;
-  //   const y = b.summary;
-
-  //   return (
-  //     x.no_travel_miles - y.no_travel_miles ||
-  //     x.severe_miles - y.severe_miles ||
-  //     x.high_miles - y.high_miles ||
-  //     x.average_risk_score - y.average_risk_score ||
-  //     x.unavailable_miles - y.unavailable_miles ||
-  //     a.route.duration_hours - b.route.duration_hours
-  //   );
-  // });
-
-  const lowestRiskRoute = rankedRoutes[0];
-
-  const hasUsableForecast =
-    lowestRiskRoute &&
-    lowestRiskRoute.summary.unavailable_miles <
-      lowestRiskRoute.route.distance_miles;
-
-  const safestRouteId = hasUsableForecast
-    ? lowestRiskRoute.route.route_id
-    : null;
+  // One card opens at a time, and opening it also highlights that route on the map.
+  const toggleRouteDetails = (routeId: string) => {
+    setExpandedRouteId((current) => (current === routeId ? null : routeId));
+    setSelectedRouteId(routeId);
+  };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${analysis ? "results-view" : ""}`}>
       <header className="app-header">
-        <h1>Truck Route Safety</h1>
+        <h1>Weather-Aware Truck Routing</h1>
         <p>Smarter routes. Safer deliveries.</p>
       </header>
 
-      <main className="dashboard">
-        <TripForm
-          onSubmit={handleTripSubmit}
-          loading={loading}
-        />
+      <main className={`dashboard ${analysis ? "has-results" : ""}`}>
+        <div className="side-panel">
+        {analysis && (
+          <>
+            <button
+              type="button"
+              className="new-search-button"
+              onClick={() => setAnalysis(null)}
+            >
+              <span aria-hidden="true">←</span> New search
+            </button>
 
-        {error && (
-          <div className="error-message">{error}</div>
+            <TripSummary
+              trip={analysis.trip}
+              editing={editingTrip}
+              onToggleEdit={() => setEditingTrip((current) => !current)}
+            />
+          </>
         )}
 
-        {loading && (
-          <p className="loading-message">
-            Calculating routes and weather conditions...
-          </p>
+        {/* Stays mounted while collapsed so the entered values are kept. */}
+        <div hidden={Boolean(analysis) && !editingTrip}>
+          <TripForm
+            onSubmit={handleTripSubmit}
+            loading={loading}
+          />
+        </div>
+
+        {error && (
+          <div className="error-message" role="alert">{error}</div>
         )}
 
         {analysis && (
-          <section className="results-section">
+          <>
+            <div
+              className={`recommendation-banner ${recommendedRouteId ? "" : "unsafe"}`}
+              role="status"
+            >
+              <strong>
+                {recommendedRouteId ? "Recommendation" : "No safe route"}
+              </strong>
+              <span>{analysis.recommendation.message}</span>
+            </div>
+
             <div className="route-comparison-heading">
               <div>
                 <h2>Available Routes</h2>
                 <p>
-                  Comparing {analysis.routes.length}{" "}
-                  {analysis.routes.length === 1 ? "route" : "routes"}{" "}
-                  using forecast conditions for Hour {selectedHour}.
+                  Ranked by Severe miles, then High miles, average risk,
+                  and travel time, using the forecast at each checkpoint's
+                  arrival time.
                 </p>
               </div>
             </div>
 
-            {safestRouteId ? (
-              <p className="safest-route-hint">
-                The <strong>Safest Route</strong> tag identifies the
-                lowest-risk available route for the selected forecast
-                hour.
-              </p>
-            ) : (
-              <p className="safest-route-hint">
-                There is not enough forecast data to identify a
-                safest route for this hour.
-              </p>
-            )}
-
             <div className="route-cards">
-              {dynamicSummaries.map(({ route, summary }) => (
+              {analysis.routes.map((route, index) => (
                 <RouteCard
                   key={route.route_id}
                   route={route}
-                  safest={route.route_id === safestRouteId}
-                  summary={summary}
-                  selectedHour={selectedHour}
+                  index={index}
+                  departure={analysis.trip.departure_datetime}
+                  recommended={route.route_id === recommendedRouteId}
+                  selected={route.route_id === selectedRouteId}
+                  expanded={route.route_id === expandedRouteId}
+                  onToggleDetails={toggleRouteDetails}
                 />
               ))}
             </div>
 
+          </>
+        )}
+        </div>
+
+        {analysis && (
+          <div className="map-panel">
             <RouteMap
               routes={analysis.routes}
-              selectedHour={selectedHour}
-              onSelectedHourChange={setSelectedHour}
+              heatmap={analysis.corridor_heatmap}
+              departure={analysis.trip.departure_datetime}
+              recommendedRouteId={recommendedRouteId}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={setSelectedRouteId}
             />
-          </section>
+          </div>
         )}
       </main>
     </div>

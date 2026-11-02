@@ -1,47 +1,68 @@
 import type { Route } from "../types";
-import RiskBadge from "./RiskBadge";
-
-interface DynamicRiskSummary {
-  low_miles: number;
-  moderate_miles: number;
-  high_miles: number;
-  severe_miles: number;
-  no_travel_miles: number;
-  unavailable_miles: number;
-  unavailable_checkpoints: number;
-  average_risk_score: number;
-}
+import { formatDateTime, routeColors } from "../utils/risk";
+import CheckpointTable from "./CheckpointTable";
+import RiskBar from "./RiskBar";
 
 interface RouteCardProps {
   route: Route;
-  safest: boolean;
-  summary: DynamicRiskSummary;
-  selectedHour: number;
+  index: number;
+  departure: string;
+  recommended: boolean;
+  selected: boolean;
+  expanded: boolean;
+  onToggleDetails: (routeId: string) => void;
 }
 
 function RouteCard({
   route,
-  safest,
-  summary,
-  selectedHour,
+  index,
+  departure,
+  recommended,
+  selected,
+  expanded,
+  onToggleDetails,
 }: RouteCardProps) {
+  const summary = route.risk_summary;
+
+  const arrival =
+    new Date(departure).getTime() + route.duration_hours * 3600 * 1000;
+
+  const classNames = [
+    "route-card",
+    recommended ? "recommended" : "",
+    selected ? "selected" : "",
+  ].join(" ");
+
   return (
     <article
-      className={`route-card ${safest ? "recommended" : ""}`}
-      aria-label={`${route.route_name}${safest ? ", safest route" : ""}`}
+      className={classNames}
+      aria-label={`${route.route_name}${recommended ? ", recommended" : ""}`}
     >
       <div className="route-card-header">
         <div>
-          <span className="route-card-eyebrow">ROUTE OPTION</span>
+          <span className="route-card-eyebrow">
+            <span
+              className="route-color-swatch"
+              style={{ backgroundColor: routeColors[index % routeColors.length] }}
+            />
+            ROUTE OPTION
+          </span>
           <h3>{route.route_name}</h3>
+          {route.via && <p className="route-card-via">via {route.via}</p>}
         </div>
 
-        {safest && (
+        {recommended && (
           <span className="safest-route-label">
-            <span aria-hidden="true">★</span> Safest Route
+            <span aria-hidden="true">★</span> Recommended
           </span>
         )}
       </div>
+
+      {summary.no_travel_miles > 0 && (
+        <p className="route-card-warning">
+          Not recommended: No Travel conditions on this route.
+        </p>
+      )}
 
       <div className="route-card-stats">
         <div className="route-stat">
@@ -53,39 +74,19 @@ function RouteCard({
           <span className="route-stat-label">Travel time</span>
           <strong>{route.duration_hours.toFixed(1)} hrs</strong>
         </div>
+
+        <div className="route-stat">
+          <span className="route-stat-label">Arrival</span>
+          <strong>{formatDateTime(arrival)}</strong>
+        </div>
       </div>
 
       <div className="route-card-risk-heading">
         <h4>Risk Breakdown</h4>
-        <span>Hour {selectedHour}</span>
+        <span>At arrival times</span>
       </div>
 
-      <div className="risk-summary">
-        <div className="risk-summary-row">
-          <span><RiskBadge level="Low" /></span>
-          <strong>{summary.low_miles.toFixed(1)} mi</strong>
-        </div>
-
-        <div className="risk-summary-row">
-          <span><RiskBadge level="Moderate" /></span>
-          <strong>{summary.moderate_miles.toFixed(1)} mi</strong>
-        </div>
-
-        <div className="risk-summary-row">
-          <span><RiskBadge level="High" /></span>
-          <strong>{summary.high_miles.toFixed(1)} mi</strong>
-        </div>
-
-        <div className="risk-summary-row">
-          <span><RiskBadge level="Severe" /></span>
-          <strong>{summary.severe_miles.toFixed(1)} mi</strong>
-        </div>
-
-        <div className="risk-summary-row">
-          <span><RiskBadge level="No Travel" /></span>
-          <strong>{summary.no_travel_miles.toFixed(1)} mi</strong>
-        </div>
-      </div>
+      <RiskBar summary={summary} />
 
       <div className="route-card-footer">
         <div>
@@ -93,21 +94,17 @@ function RouteCard({
           <strong>{summary.average_risk_score.toFixed(2)} / 4</strong>
         </div>
 
-        {summary.unavailable_miles > 0 && (
-          <div className="forecast-unavailable">
-            <span className="route-stat-label">Forecast unavailable</span>
-            <strong>{summary.unavailable_miles.toFixed(1)} mi</strong>
-          </div>
-        )}
+        <button
+          type="button"
+          className="route-select-button"
+          aria-expanded={expanded}
+          onClick={() => onToggleDetails(route.route_id)}
+        >
+          {expanded ? "Hide details" : "View details"}
+        </button>
       </div>
 
-      {summary.unavailable_checkpoints > 0 && (
-        <p className="route-card-note">
-          Weather forecast unavailable at{" "}
-          {summary.unavailable_checkpoints} checkpoint
-          {summary.unavailable_checkpoints === 1 ? "" : "s"}.
-        </p>
-      )}
+      {expanded && <CheckpointTable route={route} />}
     </article>
   );
 }
