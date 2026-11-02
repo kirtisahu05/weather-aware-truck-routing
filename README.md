@@ -7,12 +7,18 @@ A React and Django app that helps a truck driver choose the safest route. Enter 
 
 ## How it works
 
-1. **Routes.** Mapbox Directions supplies the routes. It often returns only one or two, so the backend requests more through a waypoint to the side of the fastest route. It discards any that mostly repeat a known route or take over 1.6 times as long as the fastest.
+1. **Routes.** Mapbox Directions supplies the routes. It often returns only one or two, so the backend requests more through a waypoint to the side of the fastest route. It discards any forced route that mostly repeats a known route or takes over 1.6 times as long as the fastest.
 2. **Checkpoints.** Each route is sampled every 10, 25, or 50 miles, plus the origin and destination. ETAs assume steady progress over the route's duration.
 3. **Weather.** Each checkpoint uses the Open-Meteo forecast for the hour nearest its ETA, not the departure hour.
 4. **Risk.** Wind, rain, and snow are each classified, the worst one applies, and the load rules are applied on top.
 5. **Recommendation.** Routes are ranked and the reason for the choice is shown.
 6. **Heatmap.** An even grid of weather samples covers the corridor, with a risk level for each hour from 0 to 48.
+
+## Using the map
+
+- **Forecast timeline.** Drag the slider or press Play to step through hours 0 to 48. Reset to Departure returns to hour 0.
+- **Checkpoint risk filters.** Show or hide checkpoints by risk level.
+- **Export Data.** Download every route's checkpoints as a CSV file.
 
 ## Risk rules
 
@@ -50,7 +56,7 @@ Routes are compared in this order:
 - The API returns all 49 hours of heatmap data at once. The slider only switches which hour the map layer reads, so it makes no network requests and sends no new data to the map.
 - Checkpoints are drawn as one GPU layer rather than hundreds of DOM markers.
 - The grid is limited to 120 points, and its spacing grows with trip length.
-- Heatmap color follows risk rather than how many points overlap, because the grid is even and the radius stays fixed on the ground at every zoom level.
+- Heatmap color approximates risk: nearby points blend, so it is calibrated to match the legend at the corridor's center, and edges can look lower risk. The grid is even and the radius stays fixed on the ground at every zoom level, so the number of overlapping points stays steady.
 - Weather lookups are de-duplicated, sent in parallel batches, and cached for 30 minutes.
 
 ## Known limitations
@@ -91,6 +97,15 @@ cd backend && python manage.py test routing
 cd frontend && npm run test:run && npm run typecheck && npm run lint
 ```
 
+To lint the backend:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+ruff check .
+ruff format --check .
+```
+
 ## Deployment
 
 The `Dockerfile` builds the React app and serves it and the API from one Django service. To deploy on Render:
@@ -98,7 +113,7 @@ The `Dockerfile` builds the React app and serves it and the API from one Django 
 1. Create a new **Blueprint** from this repository, which uses `render.yaml`.
 2. Set `MAPBOX_ACCESS_TOKEN` and `VITE_MAPBOX_TOKEN` when prompted.
 
-On Render's free plan, the first request after a period of inactivity takes up to a minute while the service wakes up. On any other Docker host, also set `DJANGO_ALLOWED_HOSTS` and pass `VITE_MAPBOX_TOKEN` as a build argument.
+On Render's free plan, the first request after a period of inactivity takes up to a minute while the service wakes up. On any other Docker host, set `MAPBOX_ACCESS_TOKEN`, `DJANGO_SECRET_KEY`, and `DJANGO_ALLOWED_HOSTS`, and pass `VITE_MAPBOX_TOKEN` as a build argument.
 
 ## API
 
@@ -113,6 +128,8 @@ On Render's free plan, the first request after a period of inactivity takes up t
   "checkpoint_interval": 25
 }
 ```
+
+Use a current `departure_datetime`: it can be at most 1 day in the past or 13 days ahead. `load_weight` is in pounds. `checkpoint_interval` is optional, is 10, 25, or 50, and defaults to 25.
 
 It returns `routes` (each with `checkpoints` and `risk_summary`), `recommendation`, and `corridor_heatmap`. If the heatmap's weather lookup fails, `corridor_heatmap` is `null` and the route results are still returned.
 
@@ -132,5 +149,7 @@ backend/routing/services/
 frontend/src/
   App.tsx                Page state and results
   components/            TripForm, TripSummary, RouteCard, RiskBar, RouteMap, CheckpointTable, RiskBadge
-  utils/                 Risk colors, truck position, and route label placement
+  services/api.ts        API client
+  types/                 Shared TypeScript types
+  utils/                 Risk colors, truck position, route label placement, and map view limits
 ```
