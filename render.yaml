@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: weather-aware-truck-routing
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health/
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: MAPBOX_ACCESS_TOKEN
+        sync: false
+      - key: VITE_MAPBOX_TOKEN
+        sync: false

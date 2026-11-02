@@ -1,7 +1,9 @@
-from unittest.mock import patch
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 import requests
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -13,7 +15,7 @@ class GenerateCheckpointsAPITests(APITestCase):
         self.valid_payload = {
             "origin": "New York, NY",
             "destination": "Boston, MA",
-            "departure_datetime": "2026-01-01T10:00:00Z",
+            "departure_datetime": (timezone.now() + timedelta(days=1)).isoformat(),
             "load_weight": 25000,
             "checkpoint_interval": 25,
         }
@@ -58,7 +60,28 @@ class GenerateCheckpointsAPITests(APITestCase):
 
         self.mock_weather_service.fetch_weather.side_effect = self.make_weather_results
 
-    def make_weather_results(self, checkpoints, departure_datetime=None):
+        self.mock_weather_service.fetch_hourly_grid.side_effect = self.make_hourly_grid
+
+    def make_hourly_grid(self, points, departure_datetime):
+        return [
+            [
+                {
+                    "hour_offset": 0,
+                    "wind_mph": 10.0,
+                    "rain_inches_per_hour": 0.0,
+                    "snow_inches_per_hour": 0.0,
+                },
+                {
+                    "hour_offset": 1,
+                    "wind_mph": 40.0,
+                    "rain_inches_per_hour": 0.0,
+                    "snow_inches_per_hour": 0.0,
+                },
+            ]
+            for _ in points
+        ]
+
+    def make_weather_results(self, checkpoints):
         """
         Simulate weather provider results for every checkpoint.
         """
@@ -73,21 +96,6 @@ class GenerateCheckpointsAPITests(APITestCase):
                 "rain_inches_per_hour": 0.0,
                 "snow_inches_per_hour": 0.0,
             }
-
-            result["hourly_forecast"] = [
-                {
-                    "hour_offset": 0,
-                    "wind_mph": 10.0,
-                    "rain_inches_per_hour": 0.0,
-                    "snow_inches_per_hour": 0.0,
-                },
-                {
-                    "hour_offset": 1,
-                    "wind_mph": 15.0,
-                    "rain_inches_per_hour": 0.0,
-                    "snow_inches_per_hour": 0.0,
-                },
-            ]
 
             results.append(result)
 
@@ -152,23 +160,64 @@ class GenerateCheckpointsAPITests(APITestCase):
 
             self.assertFalse(checkpoint["risk"]["no_travel"])
 
-    def test_calculates_hourly_forecast_risk(self):
+    def test_returns_corridor_heatmap_with_risk_per_hour(self):
 
         response = self.client.post(self.url, self.valid_payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        checkpoints = response.data["routes"][0]["checkpoints"]
+        heatmap = response.data["corridor_heatmap"]
 
-        for checkpoint in checkpoints:
-            hourly_forecast = checkpoint["hourly_forecast"]
+        self.assertEqual(heatmap["hours"], 49)
+        self.assertGreater(len(heatmap["points"]), 0)
 
-            self.assertEqual(len(hourly_forecast), 2)
+        # Low at hour 0, High at hour 1, and no forecast for the remaining hours.
+        self.assertEqual(heatmap["points"][0]["risks"][:3], [0, 2, -1])
+        self.assertEqual(len(heatmap["points"][0]["risks"]), 49)
 
-            for forecast in hourly_forecast:
-                self.assertIn("risk", forecast)
+    def test_route_analysis_survives_heatmap_failure(self):
 
-                self.assertEqual(forecast["risk"]["overall_risk"], "Low")
+        self.mock_weather_service.fetch_hourly_grid.side_effect = requests.RequestException("down")
+
+        response = self.client.post(self.url, self.valid_payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["corridor_heatmap"])
+        self.assertEqual(response.data["recommendation"]["recommended_route_id"], "route_1")
+
+    def test_provider_errors_do_not_expose_the_request_url(self):
+
+        self.mock_routing_service.get_routes.side_effect = requests.RequestException(
+            "401 for url: https://api.mapbox.com/x?access_token=secret"
+        )
+
+        response = self.client.post(self.url, self.valid_payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertNotIn("secret", str(response.data))
+
+    def test_rate_limit_returns_a_clear_message(self):
+
+        rate_limited = requests.RequestException(response=MagicMock(status_code=429))
+
+        self.mock_weather_service.fetch_weather.side_effect = rate_limited
+
+        response = self.client.post(self.url, self.valid_payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn("rate limit", response.data["message"])
+
+    def test_rejects_departure_beyond_forecast_range(self):
+
+        payload = self.valid_payload.copy()
+        payload["departure_datetime"] = (timezone.now() + timedelta(days=30)).isoformat()
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("days ahead", response.data["message"])
+
+        self.mock_routing_service.get_routes.assert_not_called()
 
     def test_calculates_route_risk_summary(self):
 

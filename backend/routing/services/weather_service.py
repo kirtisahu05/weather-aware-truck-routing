@@ -1,10 +1,31 @@
-from datetime import datetime, timezone
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
 import requests
+from django.core.cache import cache
 
 
 class WeatherService:
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
+
+    # Open-Meteo accepts many locations in one request.
+    BATCH_SIZE = 50
+    MAX_WORKERS = 4
+
+    MAX_ATTEMPTS = 3
+    RETRY_DELAY_SECONDS = 1.0
+    RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+
+    FORECAST_HORIZON_DAYS = 15
+
+    # Open-Meteo's free tier allows 600 locations a minute, so one request must stay well
+    # below that. Long trips sampled every 10 miles would otherwise need about 1,000. They
+    # share lookups on a coarser grid instead, and each checkpoint still uses its own ETA hour.
+    MAX_LOCATIONS_PER_LOOKUP = 250
+    LOOKUP_GRID_DEGREES = (0.01, 0.05, 0.1, 0.25, 0.5)
+
+    CACHE_SECONDS = 30 * 60
 
     def parse_utc_datetime(self, value):
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -14,62 +35,152 @@ class WeatherService:
 
         return parsed.astimezone(timezone.utc)
 
-    def fetch_weather(self, checkpoints, departure_datetime=None):
+    def request_batch(self, batch, start_date, end_date):
+
+        params = {
+            "latitude": ",".join(str(latitude) for latitude, _ in batch),
+            "longitude": ",".join(str(longitude) for _, longitude in batch),
+            "hourly": "wind_speed_10m,rain,showers,snowfall",
+            "wind_speed_unit": "mph",
+            "timezone": "UTC",
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            response = requests.get(self.BASE_URL, params=params, timeout=60)
+
+            if response.status_code not in self.RETRY_STATUS_CODES or attempt == self.MAX_ATTEMPTS:
+                break
+
+            time.sleep(self.RETRY_DELAY_SECONDS * attempt)
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Open-Meteo returns a list for multiple locations.
+        weather_locations = [data] if isinstance(data, dict) else data
+
+        if len(weather_locations) != len(batch):
+            raise ValueError("Weather response location count mismatch")
+
+        return weather_locations
+
+    def lookup_keys(self, points):
+        """Snap points to the finest grid that fits the lookup budget.
+
+        Routes share long stretches of road, so even the finest grid (about 0.7 mile)
+        removes many duplicates.
+        """
+        for degrees in self.LOOKUP_GRID_DEGREES:
+            keys = [
+                (
+                    round(round(point["latitude"] / degrees) * degrees, 2),
+                    round(round(point["longitude"] / degrees) * degrees, 2),
+                )
+                for point in points
+            ]
+
+            if len(set(keys)) <= self.MAX_LOCATIONS_PER_LOOKUP:
+                break
+
+        return keys
+
+    def fetch_locations(self, points, start, end):
+        """Return one forecast per point, covering start through end."""
+        keys = self.lookup_keys(points)
+
+        start_date = start.astimezone(timezone.utc).date()
+
+        # The provider rejects dates past its horizon. Times beyond it are reported
+        # when the hours are looked up instead.
+        latest_date = datetime.now(timezone.utc).date() + timedelta(days=self.FORECAST_HORIZON_DAYS)
+
+        # A time after 23:30 rounds to midnight, which belongs to the next day.
+        end_date = min((end + timedelta(hours=1)).astimezone(timezone.utc).date(), latest_date)
+
+        def cache_key(key):
+            return f"weather:{key[0]}:{key[1]}:{start_date}:{end_date}"
+
+        unique_keys = list(dict.fromkeys(keys))
+
+        cached = cache.get_many([cache_key(key) for key in unique_keys])
+
+        by_key = {key: cached[cache_key(key)] for key in unique_keys if cache_key(key) in cached}
+
+        missing_keys = [key for key in unique_keys if key not in by_key]
+
+        batches = [
+            missing_keys[index : index + self.BATCH_SIZE]
+            for index in range(0, len(missing_keys), self.BATCH_SIZE)
+        ]
+
+        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as pool:
+            responses = pool.map(
+                lambda batch: self.request_batch(batch, start_date, end_date), batches
+            )
+
+            for batch, locations in zip(batches, responses):
+                fetched = dict(zip(batch, locations))
+
+                by_key.update(fetched)
+
+                cache.set_many(
+                    {cache_key(key): value for key, value in fetched.items()}, self.CACHE_SECONDS
+                )
+
+        return [by_key[key] for key in keys]
+
+    def fetch_weather(self, checkpoints):
+        """Attach the forecast for each checkpoint's estimated arrival hour."""
 
         if not checkpoints:
             return []
 
-        results = []
+        arrivals = [datetime.fromisoformat(point["estimated_arrival"]) for point in checkpoints]
 
-        # Batch coordinates to reduce external API requests.
-        # Open-Meteo supports multiple locations in one request.
-        batch_size = 50
+        locations = self.fetch_locations(checkpoints, min(arrivals), max(arrivals))
 
-        for start in range(0, len(checkpoints), batch_size):
-            batch = checkpoints[start : start + batch_size]
+        return [
+            self.extract_checkpoint_weather(checkpoint, weather_data)
+            for checkpoint, weather_data in zip(checkpoints, locations)
+        ]
 
-            latitudes = ",".join(str(point["latitude"]) for point in batch)
+    def fetch_hourly_grid(self, points, departure_datetime, hours=49):
+        """Return an hourly forecast per point, from departure through hours - 1."""
 
-            longitudes = ",".join(str(point["longitude"]) for point in batch)
+        if not points:
+            return []
 
-            params = {
-                "latitude": latitudes,
-                "longitude": longitudes,
-                "hourly": ("wind_speed_10m,rain,snowfall"),
-                "wind_speed_unit": "mph",
-                "timezone": "UTC",
-                "forecast_days": 16,
-                "past_days": 1,
-            }
+        end = departure_datetime + timedelta(hours=hours)
 
-            response = requests.get(self.BASE_URL, params=params, timeout=60)
+        locations = self.fetch_locations(points, departure_datetime, end)
 
-            response.raise_for_status()
+        return [
+            self.extract_hourly_forecast(weather_data, departure_datetime, hours)
+            for weather_data in locations
+        ]
 
-            data = response.json()
+    def read_hour(self, hourly, index):
+        """Read one forecast hour in the units the risk rules use, or None if incomplete."""
 
-            # Open-Meteo returns a list for multiple locations.
-            if isinstance(data, dict):
-                weather_locations = [data]
-            else:
-                weather_locations = data
+        wind = hourly.get("wind_speed_10m", [])[index]
+        rain = hourly.get("rain", [])[index]
+        snow = hourly.get("snowfall", [])[index]
 
-            if len(weather_locations) != len(batch):
-                raise ValueError("Weather response location count mismatch")
+        # "rain" only covers large-scale rain; convective rain is reported as "showers".
+        # Not every weather model reports showers.
+        showers = hourly.get("showers", [])[index] or 0
 
-            for checkpoint, weather_data in zip(batch, weather_locations):
-                # Extract weather for the checkpoint's ETA.
-                checkpoint_result = self.extract_checkpoint_weather(checkpoint, weather_data)
+        if wind is None or rain is None or snow is None:
+            return None
 
-                # Attach hourly weather from departure through +48 hours.
-                if departure_datetime is not None:
-                    checkpoint_result["hourly_forecast"] = self.extract_hourly_forecast(
-                        weather_data, departure_datetime, hours=49
-                    )
-
-                results.append(checkpoint_result)
-
-        return results
+        return {
+            "wind_mph": round(float(wind), 2),
+            "rain_inches_per_hour": round((float(rain) + float(showers)) / 25.4, 4),
+            "snow_inches_per_hour": round(float(snow) / 2.54, 4),
+        }
 
     def extract_checkpoint_weather(self, checkpoint, weather_data):
 
@@ -103,25 +214,14 @@ class WeatherService:
         if difference_hours > 0.5:
             raise ValueError("No matching hourly weather forecast for checkpoint ETA")
 
-        wind_values = hourly.get("wind_speed_10m", [])
-        rain_values = hourly.get("rain", [])
-        snow_values = hourly.get("snowfall", [])
+        weather = self.read_hour(hourly, nearest_index)
 
-        wind = wind_values[nearest_index]
-        rain = rain_values[nearest_index]
-        snow = snow_values[nearest_index]
-
-        if wind is None or rain is None or snow is None:
+        if weather is None:
             raise ValueError("Weather data is incomplete for checkpoint")
 
         return {
             **checkpoint,
-            "weather": {
-                "forecast_time": nearest_time.isoformat(),
-                "wind_mph": round(float(wind), 2),
-                "rain_inches_per_hour": round(float(rain) / 25.4, 4),
-                "snow_inches_per_hour": round(float(snow) / 2.54, 4),
-            },
+            "weather": {"forecast_time": nearest_time.isoformat(), **weather},
         }
 
     def extract_hourly_forecast(self, weather_data, departure_datetime, hours=49):
@@ -129,9 +229,6 @@ class WeatherService:
         hourly = weather_data.get("hourly", {})
 
         times = hourly.get("time", [])
-        winds = hourly.get("wind_speed_10m", [])
-        rains = hourly.get("rain", [])
-        snows = hourly.get("snowfall", [])
 
         if not times:
             raise ValueError("Hourly forecast data is unavailable.")
@@ -156,17 +253,17 @@ class WeatherService:
         end_index = min(start_index + hours, len(forecast_times))
 
         for index in range(start_index, end_index):
+            weather = self.read_hour(hourly, index)
+
             # Skip incomplete weather records.
-            if winds[index] is None or rains[index] is None or snows[index] is None:
+            if weather is None:
                 continue
 
             forecast.append(
                 {
                     "hour_offset": index - start_index,
                     "forecast_time": forecast_times[index].isoformat(),
-                    "wind_mph": round(float(winds[index]), 2),
-                    "rain_inches_per_hour": round(float(rains[index]) / 25.4, 4),
-                    "snow_inches_per_hour": round(float(snows[index]) / 2.54, 4),
+                    **weather,
                 }
             )
 

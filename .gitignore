@@ -12,3 +12,7 @@ dist/
 # Environment
 .DS_Store
 DEVELOPER_GUIDE.md
+# Build output
+backend/staticfiles/
+*.tsbuildinfo
+.ruff_cache/

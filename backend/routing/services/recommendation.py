@@ -43,20 +43,23 @@ class RecommendationEngine:
         # Scale checkpoint distances to match Mapbox distance.
         scale_factor = route_total / checkpoint_total
 
-        # Each checkpoint's risk represents the segment
-        # ending at that checkpoint.
-        for index in range(1, len(checkpoints)):
-            previous = checkpoints[index - 1]
-            current = checkpoints[index]
+        # Each checkpoint's risk covers the road closest to it: halfway back to the
+        # previous checkpoint and halfway on to the next. This way the origin and
+        # destination count too, so No Travel at either end is never ignored.
+        distances = [float(checkpoint["distance_miles"]) for checkpoint in checkpoints]
 
-            raw_segment_miles = float(current["distance_miles"]) - float(previous["distance_miles"])
+        for index, checkpoint in enumerate(checkpoints):
+            covered_from = (distances[index - 1] + distances[index]) / 2 if index else distances[0]
 
-            if raw_segment_miles < 0:
-                raise ValueError("Checkpoint distances must be in ascending order.")
+            covered_to = (
+                (distances[index] + distances[index + 1]) / 2
+                if index < len(checkpoints) - 1
+                else distances[-1]
+            )
 
-            segment_miles = raw_segment_miles * scale_factor
+            segment_miles = (covered_to - covered_from) * scale_factor
 
-            risk = current.get("risk", {}).get("overall_risk")
+            risk = checkpoint.get("risk", {}).get("overall_risk")
 
             if risk not in self.RISK_RANKS:
                 raise ValueError(f"Invalid or missing checkpoint risk: {risk}")
@@ -122,7 +125,41 @@ class RecommendationEngine:
         return {
             "recommended_route_id": best_route["route_id"],
             "message": (
-                f"{best_route.get('route_name', best_route['route_id'])} "
-                "is the safest available route based on the risk analysis."
+                f"{best_route.get('route_name', best_route['route_id'])} is recommended"
+                f"{self.explain_choice(best_route, ranked_routes[1:], routes)}."
             ),
         }
+
+    def explain_choice(self, best_route, other_eligible, all_routes):
+
+        if len(all_routes) == 1:
+            return ": it is the only route available"
+
+        if not other_eligible:
+            return ": every other route has No Travel conditions"
+
+        runner_up = other_eligible[0]
+
+        best = best_route["risk_summary"]
+        other = runner_up["risk_summary"]
+
+        name = runner_up.get("route_name", runner_up["route_id"])
+
+        if best["severe_miles"] != other["severe_miles"]:
+            return (
+                f": {best['severe_miles']:.0f} Severe miles versus "
+                f"{other['severe_miles']:.0f} on {name}"
+            )
+
+        if best["high_miles"] != other["high_miles"]:
+            return (
+                f": {best['high_miles']:.0f} High miles versus {other['high_miles']:.0f} on {name}"
+            )
+
+        if best["average_risk_score"] != other["average_risk_score"]:
+            return (
+                f": average risk {best['average_risk_score']:.2f} versus "
+                f"{other['average_risk_score']:.2f} on {name}"
+            )
+
+        return f": risk is equal, and it is faster than {name}"

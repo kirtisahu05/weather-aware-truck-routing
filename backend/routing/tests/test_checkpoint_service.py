@@ -41,6 +41,16 @@ class CheckpointServiceTests(unittest.TestCase):
             checkpoints[-1]["distance_miles"], result["total_distance_miles"], places=2
         )
 
+    def test_measures_north_south_distance(self):
+        # One degree of latitude is about 69 miles. Equator-only fixtures would miss a bug here.
+        geometry = {"type": "LineString", "coordinates": [[-87.6, 40.0], [-87.6, 41.0]]}
+
+        result = self.generate(geometry=geometry)
+
+        self.assertAlmostEqual(result["total_distance_miles"], 69.1, delta=0.2)
+
+        self.assertEqual(result["checkpoint_count"], 4)
+
     def test_includes_origin_and_destination(self):
         result = self.generate()
 

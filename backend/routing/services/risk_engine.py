@@ -36,7 +36,7 @@ class RiskEngine:
             elif value < 0.25:
                 return "Moderate"
 
-            elif value <= 0.50:
+            elif value < 0.50:
                 return "High"
 
             elif value <= 1.00:

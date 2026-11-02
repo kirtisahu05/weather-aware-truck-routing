@@ -1,30 +1,10 @@
 import math
 from datetime import timedelta
 
+from .geo import haversine_miles
+
 
 class CheckpointService:
-    EARTH_RADIUS_MILES = 3958.8
-
-    def haversine(self, point1, point2):
-        lon1, lat1 = point1
-        lon2, lat2 = point2
-
-        lat1 = math.radians(lat1)
-        lat2 = math.radians(lat2)
-
-        delta_lat = math.radians(lat2 - lat1)
-        delta_lon = math.radians(lon2 - lon1)
-
-        a = (
-            math.sin(delta_lat / 2) ** 2
-            + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
-        )
-
-        # Protect against floating-point rounding errors.
-        a = max(0.0, min(1.0, a))
-
-        return 2 * self.EARTH_RADIUS_MILES * math.asin(math.sqrt(a))
-
     def interpolate(self, point1, point2, fraction):
         lon = point1[0] + (point2[0] - point1[0]) * fraction
 
@@ -93,7 +73,7 @@ class CheckpointService:
             start = validated_coordinates[index]
             end = validated_coordinates[index + 1]
 
-            segment_distance = self.haversine(start, end)
+            segment_distance = haversine_miles(start, end)
 
             segments.append(
                 {
